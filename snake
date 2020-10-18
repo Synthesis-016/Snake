@@ -1,1 +1,1136 @@
+#include <graphics.h>  
+#include <conio.h>
+#include <stdio.h>
+#include <ctime>
+#include <cmath>
+#include <iostream>
+#include <fstream>
+#include <windows.h>
+#include <Mmsystem.h>
+#pragma comment(lib, "winmm.lib")
+#pragma comment(lib, "MSIMG32.LIB")
 
+//////////窗口/////////
+const short Screenwidth = 800;
+const short Screenheight = 600;
+
+/////////全局/////////
+IMAGE* map = new IMAGE(Screenwidth, Screenheight);
+IMAGE* start = new IMAGE(Screenwidth, Screenheight);
+IMAGE* imgnode;
+IMAGE* imghead;
+IMAGE* imgmode = new IMAGE(310, 400);
+IMAGE* imgpause = new IMAGE(260, 284);
+IMAGE* imgrule = new IMAGE(600, 400);
+MOUSEMSG mouse;
+bool Dead = FALSE;
+bool abc = FALSE;
+bool m;
+bool Load = FALSE;
+const double PI = 3.14159;
+short step;//4  3  2;
+int nFood = 10;
+int nPgrass = 10;
+int nBomb = 10;
+int nodesize = 21;
+
+FILE *mem;
+FILE *REC;
+
+time_t Tm;
+time_t tf;
+time_t tb;
+time_t tp;
+time_t tm;
+POINT* foodmsg = new POINT[nFood];
+POINT* pgrassmsg = new POINT[nPgrass];
+POINT* bombmsg = new POINT[nBomb];
+/////////颜色////////
+const COLORREF mapcolor = WHITE;
+const COLORREF linecolor = RGB(180, 180, 180);
+const COLORREF wallcolor = RGB(50, 50, 50);
+const COLORREF gatecolor = RGB(32, 140, 181);
+const COLORREF foodcolor = RGB(213, 0, 0);
+const COLORREF pgrasscolor = RGB(142, 166, 47);
+const COLORREF mgrasscolor = RGB(3, 209, 96);
+const COLORREF bombcolor = RGB(0, 0, 0);
+const COLORREF snakecolor1 = RGB(200, 166, 66);
+const COLORREF snakecolor2 = RGB(255, 0, 0);
+
+//地图//
+int mapX = 0;
+int mapY = 0;
+const short gap = 40;
+
+//方向//
+const short N = 1;
+const short W = 2;
+const short S = 3;
+const short E = 4;
+const short NE = 5;
+const short NW = 6;
+const short SW = 7;
+const short SE = 8;
+
+///////////
+typedef struct FOOD
+{
+	int x;
+	int y;
+	int r;
+	COLORREF c;
+};
+FOOD Food;
+typedef struct BOMB
+{
+	int x;
+	int y;
+	int r;
+	COLORREF c;
+};
+BOMB Bomb;
+typedef struct PGRASS
+{
+	int x;
+	int y;
+	int r;
+	COLORREF c;
+};
+PGRASS Pgrass;
+typedef struct MGRASS
+{
+	int x;
+	int y;
+	int r;
+	COLORREF c;
+};
+MGRASS Mgrass;
+typedef struct SNAKEMSG
+{
+	short movedirection;
+	int length;
+};
+SNAKEMSG snakemsg;
+typedef struct NODE
+{
+	int x;
+	int y;
+	struct NODE* lastnode;
+	struct NODE* nextnode;
+}Node;
+Node* headptr, * ptr, * newptr, * temp;
+void putTimage(int x, int y, IMAGE* srcimg, IMAGE* dstimg = NULL, UINT transparentcolor = 0)
+{
+	HDC dstDC = GetImageHDC(dstimg);
+	HDC srcDC = GetImageHDC(srcimg);
+	int w = srcimg->getwidth();
+	int h = srcimg->getheight();
+	TransparentBlt(dstDC, x, y, w, h, srcDC, 0, 0, w, h, transparentcolor);
+}
+void setimage()
+{
+	imgnode = new IMAGE(nodesize, nodesize);
+	imghead = new IMAGE(nodesize, nodesize);
+	SetWorkingImage(imghead);
+	setfillcolor(snakecolor1);
+	solidcircle(nodesize / 2, nodesize / 2, nodesize / 2);
+	SetWorkingImage(imgnode);
+	setfillcolor(snakecolor2);
+	solidcircle(nodesize / 2, nodesize / 2, nodesize / 2);
+	SetWorkingImage();
+}
+
+/////食物/////
+void setfood(int n)
+{
+	Food.r = 5;
+	for(int i = 0; i<n;)
+	{
+		Food.x = rand() % 800;
+		Food.y = rand() % 600;
+		if (getpixel(Food.x, Food.y) != wallcolor && getpixel(Food.x, Food.y) != bombcolor && getpixel(Food.x, Food.y) != foodcolor && getpixel(Food.x, Food.y) != pgrasscolor)
+		{
+			if (Food.x < gap || Food.y < gap)
+			{
+				Food.x += gap;
+				Food.y += gap;
+			}
+			if (Food.x > 800 - gap || Food.y > 600 - gap)
+			{
+				Food.x -= gap;
+				Food.y -= gap;
+			}
+			foodmsg[i].x = Food.x;
+			foodmsg[i].y = Food.y;
+			i++;
+		}
+	}
+}
+void drawfood(int n)
+{
+	for(int i = 0; i<n; i++)
+	{
+		setfillcolor(foodcolor);
+		solidcircle(foodmsg[i].x, foodmsg[i].y, Food.r);
+	}
+}
+
+
+/////炸弹////
+void setbomb(int n)
+{
+
+	Bomb.r = 10;
+	for(int i = 0; i<n;)
+	{
+		Bomb.x = rand() % 800;
+		Bomb.y = rand() % 600;
+		if (getpixel(Bomb.x, Bomb.y) != wallcolor && getpixel(Bomb.x, Bomb.y) != bombcolor && getpixel(Bomb.x, Bomb.y) != foodcolor && getpixel(Bomb.x, Bomb.y) != pgrasscolor)
+		{
+			if (Bomb.x < gap || Bomb.y < gap)
+			{
+				Bomb.x += gap;
+				Bomb.y += gap;
+			}
+			if (Bomb.x > 800 - gap || Bomb.y > 600 - gap)
+			{
+				Bomb.x -= gap;
+				Bomb.y -= gap;
+			}
+			bombmsg[i].x = Bomb.x;
+			bombmsg[i].y = Bomb.y;
+			i++;
+		}
+	}
+}
+void drawbomb(int n)
+{
+	for(int i = 0; i<n; i++)
+	{
+		setfillcolor(bombcolor);
+		solidcircle(bombmsg[i].x, bombmsg[i].y, Bomb.r);
+	}
+	
+}
+
+////毒草////
+void setpgrass(int n)
+{
+	bool a = TRUE;
+	Pgrass.r = 6;
+	for(int i = 0; i<n;)
+	{
+		Pgrass.x = rand() % 800;
+		Pgrass.y = rand() % 600;
+		if (getpixel(Pgrass.x, Pgrass.y) != wallcolor && getpixel(Pgrass.x, Pgrass.y) != bombcolor && getpixel(Pgrass.x, Pgrass.y) != foodcolor && getpixel(Pgrass.x, Pgrass.y) != pgrasscolor)
+		{
+			if (Pgrass.x < gap || Pgrass.y < gap)
+			{
+				Pgrass.x += gap;
+				Pgrass.y += gap;
+			}
+			if (Pgrass.x > 800 - gap || Pgrass.y > 600 - gap)
+			{
+				Pgrass.x -= gap;
+				Pgrass.y -= gap;
+			}
+			pgrassmsg[i].x = Pgrass.x;
+			pgrassmsg[i].y = Pgrass.y;
+			i++;
+		}
+	}
+}
+
+void drawpgrass(int n)
+{
+	for(int i =0; i<n; i++)
+	{
+		setfillcolor(pgrasscolor);
+		solidcircle(pgrassmsg[i].x, pgrassmsg[i].y, Pgrass.r);
+	}
+	
+}
+void Drawmap()
+{
+	BeginBatchDraw();
+	putimage(0, 0, map);
+}
+
+////节点操作/////
+void setnode()
+{
+	newptr = new Node;
+	newptr->x = ptr->x;
+	newptr->y = ptr->y;
+	newptr->lastnode = NULL;
+	newptr->nextnode = NULL;
+	ptr->nextnode = newptr;
+	newptr->lastnode = ptr;
+	ptr = newptr;
+}
+void deletenode()
+{
+	newptr = ptr;
+	ptr = newptr->lastnode;
+	delete[]newptr;
+	newptr = ptr;
+}
+void drawsnake()
+{
+	int x, y;
+	double n = 0;
+	temp = ptr;
+	while (temp != headptr)
+	{
+		x = temp->x;
+		y = temp->y;
+		temp = temp->lastnode;
+		if(255 * (1-0.1*n) >= 120)
+		{
+			setfillcolor(RGB(255 * (1-0.1*n)+ 50,100,100));
+			solidcircle(x, y, 10);
+		}
+		else
+		{
+			setfillcolor(RGB(255 * 0.1*n + 50,100,100));
+			solidcircle(x, y, 10);
+		}
+		n+=1;
+	}
+	x = headptr->x;
+	y = headptr->y;
+	if(255 * (1-0.1*n) >= 120)
+	{
+		setfillcolor(RGB(255 * (1-0.1*n),0,0));
+		solidcircle(x, y, 10);
+	}
+	else
+	{
+		setfillcolor(RGB(255 * 0.1*n,0,0));
+		solidcircle(x, y, 10);
+	}
+	temp = NULL;
+
+}
+
+void check()
+{
+	if (headptr->x <= 5 || headptr->y <= 5 || headptr->x >= 795 || headptr->y >= 595) 
+	{
+		PlaySound(_T("E:\\hit wall.wav"), NULL, SND_ASYNC | SND_NOSTOP);
+		Dead = TRUE;
+	}
+}
+bool getgap(POINT p)
+{
+	double a, b;
+	double x1 = headptr->x, x2 = p.x;
+	double y1 = headptr->y, y2 = p.y;
+	a = abs(x1 - x2);
+	b = abs(y1 - y2);
+	if (a < 15 && b < 15) return TRUE;
+	else return FALSE;
+}
+
+void eatfood()
+{
+	bool a;
+	for(int i = 0; i<nFood; i++)
+	{
+		a = getgap(foodmsg[i]);
+		if (a)
+		{
+			PlaySound(_T("E:\\eat.wav"), NULL, SND_ASYNC | SND_NOSTOP);
+			setnode();
+			snakemsg.length++;
+			bool b = TRUE;
+			while (b)
+			{
+				Food.x = rand() % 800;
+				Food.y = rand() % 600;
+				if (getpixel(Food.x, Food.y) != wallcolor && getpixel(Food.x, Food.y) != bombcolor)
+				{
+					if (Food.x < gap || Food.y < gap)
+					{
+						Food.x += gap;
+						Food.y += gap;
+					}
+					if (Food.x > 800 - gap || Food.y > 600 - gap)
+					{
+						Food.x -= gap;
+						Food.y -= gap;
+					}
+					foodmsg[i].x = Food.x;
+					foodmsg[i].y = Food.y;
+					b = FALSE;
+				}
+			}
+		}
+	}
+}
+void eatbomb()
+{
+	bool a;
+	for(int i = 0; i<nBomb; i++)
+	{
+		a = getgap(bombmsg[i]);
+		if (a)
+		{
+			PlaySound(_T("E:\\boom.wav"), NULL, SND_ASYNC | SND_NOSTOP);
+			bool b = TRUE;
+			if (snakemsg.length <= 2)
+			{
+				Dead = TRUE;
+			}
+			else
+			{
+				if (snakemsg.length % 2 == 0) snakemsg.length = snakemsg.length / 2;
+				else snakemsg.length = (snakemsg.length + 1) / 2;
+				for (int i = 0; i < snakemsg.length; i++)
+				{
+					deletenode();
+				}
+			}
+			while(b)
+			{
+				Bomb.x = rand() % 800;
+				Bomb.y = rand() % 600;
+				if (getpixel(Bomb.x, Bomb.y) != wallcolor && getpixel(Bomb.x, Bomb.y) != foodcolor)
+				{
+					if (Bomb.x < gap || Bomb.y < gap)
+					{
+						Bomb.x += gap;
+						Bomb.y += gap;
+					}
+					if (Bomb.x > 800 - gap || Bomb.y > 600 - gap)
+					{
+						Bomb.x -= gap;
+						Bomb.y -= gap;
+					}
+					bombmsg[i].x = Bomb.x;
+					bombmsg[i].y = Bomb.y;
+					b = FALSE;
+				}
+			}
+		}
+	}
+}
+void eatpgrass()
+{
+	bool a;
+	for(int i = 0; i<nBomb; i++)
+	{
+		PlaySound(_T("E:\\poisonous grass.wav"), NULL, SND_ASYNC | SND_NOSTOP);
+		a = getgap(pgrassmsg[i]);
+		if (a)
+		{
+			bool b = TRUE;
+			if (snakemsg.length < 2)
+			{
+				Dead = TRUE;
+			}
+			else
+			{
+				snakemsg.length--;
+				deletenode();
+			}
+			while(b)
+			{
+				Pgrass.x = rand() % 800;
+				Pgrass.y = rand() % 600;
+				if (getpixel(Pgrass.x, Pgrass.y) != wallcolor && getpixel(Pgrass.x, Pgrass.y) != bombcolor && getpixel(Pgrass.x, Pgrass.y) != foodcolor && getpixel(Pgrass.x, Pgrass.y) != pgrasscolor)
+				{
+					if (Pgrass.x < gap || Pgrass.y < gap)
+					{
+						Pgrass.x += gap;
+						Pgrass.y += gap;
+					}
+					if (Pgrass.x > 800 - gap || Pgrass.y > 600 - gap)
+					{
+						Pgrass.x -= gap;
+						Pgrass.y -= gap;
+					}
+					pgrassmsg[i].x = Pgrass.x;
+					pgrassmsg[i].y = Pgrass.y;
+					b = FALSE;
+				}
+			}
+		}
+	}
+}
+
+////////
+void save()
+{
+	int i;
+	mem = fopen("E:\\memory.txt", "w+");
+	fwrite(&snakemsg.length, sizeof(snakemsg.length), 1, mem);
+	fwrite(&snakemsg.movedirection, sizeof(snakemsg.movedirection), 1, mem);
+	for(i = 0; i<nFood; i++)
+	{
+		fwrite((&foodmsg[i].x), sizeof(foodmsg[i].x), 1, mem);
+		fwrite((&foodmsg[i].y), sizeof(foodmsg[i].y), 1, mem);
+	}
+	for(i = 0; i<nPgrass; i++)
+	{
+		fwrite((&pgrassmsg[i].x), sizeof(pgrassmsg[i].x), 1, mem);
+		fwrite((&pgrassmsg[i].y), sizeof(pgrassmsg[i].y), 1, mem);
+	}
+	for(i = 0; i<nBomb; i++)
+	{
+		fwrite((&bombmsg[i].x), sizeof(bombmsg[i].x), 1, mem);
+		fwrite((&bombmsg[i].y), sizeof(bombmsg[i].y), 1, mem);
+	}
+	fwrite(&(headptr -> x), sizeof(headptr -> x), 1, mem);
+	fwrite(&(headptr -> y), sizeof(headptr -> y), 1, mem);
+	for(temp = headptr -> nextnode; temp != NULL; temp = temp -> nextnode)
+	{
+		fwrite(&(temp -> x), sizeof(temp -> x), 1, mem);
+		fwrite(&(temp -> y), sizeof(temp -> y), 1, mem);
+	}
+	fclose(mem);
+}
+void load()
+{
+	int i;
+	mem = fopen("E:\\memory.txt", "r");
+	fread(&snakemsg.length, sizeof(snakemsg.length), 1, mem);
+	fread(&snakemsg.movedirection, sizeof(snakemsg.movedirection), 1, mem);
+	for(i = 0; i<nFood; i++)
+	{
+		fread(&(foodmsg[i].x), sizeof(foodmsg[i].x), 1, mem);
+		fread(&(foodmsg[i].y), sizeof(foodmsg[i].y), 1, mem);
+	}
+	drawfood(nFood);
+	for(i = 0; i<nPgrass; i++)
+	{
+		fread(&(pgrassmsg[i].x), sizeof(pgrassmsg[i].x), 1, mem);
+		fread(&(pgrassmsg[i].y), sizeof(pgrassmsg[i].y), 1, mem);
+	}
+	drawpgrass(nPgrass);
+	for(i = 0; i<nBomb; i++)
+	{
+		fread(&(bombmsg[i].x), sizeof(bombmsg[i].x), 1, mem);
+		fread(&(bombmsg[i].y), sizeof(bombmsg[i].y), 1, mem);
+	}
+	drawbomb(nBomb);
+	newptr = new Node;
+	fread(&(newptr -> x), sizeof(newptr -> x), 1, mem);
+	fread(&(newptr -> y), sizeof(newptr -> y), 1, mem);
+	newptr->lastnode = NULL;
+	newptr->nextnode = NULL;
+	headptr = ptr = temp = newptr;
+	for(int i = 1; i<snakemsg.length; i ++)
+	{
+		newptr = new Node;
+		fread(&(newptr -> x), sizeof(temp -> x), 1, mem);
+		fread(&(newptr -> y), sizeof(temp -> y), 1, mem);
+		newptr->lastnode = NULL;
+		newptr->nextnode = NULL;
+		ptr->nextnode = newptr;
+		newptr->lastnode = ptr;
+		ptr = newptr;
+	}
+	fclose(mem);
+	drawsnake();
+
+}
+/*void readrecord()
+{
+	REC = fopen("E:\\record.txt", "r");
+
+}
+/*void record(int a)
+{
+	int n[6],i;
+	int max;
+	REC = fopen("E:\\record.txt", "w+");
+	for(i = 0; i<5; i++)
+	{
+		fwrite(&n[i], sizeof(n[i]), 1, REC);
+	}
+	max = n[0];
+	for(i = 1; 1<5; i++)
+	{
+		if(max <= n[i])
+		{
+			max = n[i];
+			n[i] = n[0];
+			n[0] = max;
+		}
+	}
+}*/
+
+////初始化////
+void rule()
+{
+	BeginBatchDraw();
+	SetWorkingImage(imgrule);
+	setbkcolor(WHITE);
+	settextcolor(BLACK);
+	cleardevice();
+	settextstyle(72, 0, "楷体");
+	outtextxy(getwidth() / 2 - textwidth("规则") / 2, 20, "规则");
+	settextstyle(25, 0, "楷体");
+	int a = textheight("暂停") + 80, b, c, d, e;
+	b = a + 56;
+	c = b + 56;
+	d = c + 56;
+	e = d + 56;
+	setfillcolor(foodcolor);
+	solidcircle(75, a + 10, 10);
+	outtextxy(100, a, "长度加1");
+	setfillcolor(pgrasscolor);
+	solidcircle(75, b + 10, 10);
+	outtextxy(100, b, "长度减1，长度为1时死亡");
+	setfillcolor(bombcolor);
+	solidcircle(75, c + 10, 10);
+	outtextxy(100, c, "长度减半，长度为1时死亡");
+	setfillcolor(mgrasscolor);
+	solidcircle(75, d + 10, 10);
+	outtextxy(100, d, "自动导航");
+	outtextxy(getwidth() / 2 - textwidth("返回") / 2, e, "返回");
+	SetWorkingImage();
+	putimage(800 / 2 - 600 / 2, 600 / 2 - 400 / 2, imgrule);
+	while(1)
+	{
+		mouse = GetMouseMsg();
+		if(mouse.x <= getwidth() / 2 - textwidth("返回") / 2 + 72 && mouse.x >= getwidth() / 2 - textwidth("返回") / 2 && mouse.y <= e + 125 && mouse.y >= e + 100)
+		{
+			settextcolor(RGB(64, 238, 147));
+			settextstyle(25, 0, "楷体");
+			outtextxy(getwidth() / 2 - textwidth("返回") / 2, e + 100, "返回");
+			FlushBatchDraw();
+			if (mouse.mkLButton)
+			{
+				PlaySound(_T("E:\\button.wav"), NULL, SND_ASYNC | SND_NOSTOP);
+				break;
+			}
+		}
+		else
+		{
+			settextcolor(BLACK);
+			settextstyle(25, 0, "楷体");
+			outtextxy(getwidth() / 2 - textwidth("返回") / 2, e + 100, "返回");
+			FlushBatchDraw();
+		}
+	}
+}
+void pause()
+{
+	BeginBatchDraw();
+	SetWorkingImage(imgpause);
+	setbkcolor(WHITE);
+	settextcolor(BLACK);
+	cleardevice();
+	settextstyle(72, 0, "楷体");
+	outtextxy(getwidth() / 2 - textwidth("暂停") / 2, 20, "暂停");
+	int a = textheight("暂停") + 80, b;
+	b = a + 76;
+	settextstyle(36, 0, "楷体");
+	outtextxy(getwidth() / 2 - textwidth("继续游戏") / 2, a, "继续游戏");
+	outtextxy(getwidth() / 2 - textwidth("保存并退出") / 2, b, "保存并退出");
+	SetWorkingImage();
+	putimage(800 / 2 - 260 / 2, 600 / 2 - 284 / 2, imgpause);
+	while(1)
+	{
+		mouse = GetMouseMsg();
+		if(mouse.x <= getwidth() / 2 - textwidth("继续游戏") / 2 + 144 && mouse.x >= getwidth() / 2 - textwidth("继续游戏") / 2 && mouse.y <= a + 194 && mouse.y >= a + 158)
+		{
+			settextcolor(RGB(64, 238, 147));
+			settextstyle(36, 0, "楷体");
+			outtextxy(getwidth() / 2 - textwidth("继续游戏") / 2, a + 158, "继续游戏");
+			FlushBatchDraw();
+			if (mouse.mkLButton)
+			{
+				PlaySound(_T("E:\\button.wav"), NULL, SND_ASYNC | SND_NOSTOP);
+				m = FALSE;
+				break;
+			}
+		}
+		else
+		{
+			settextcolor(BLACK);
+			settextstyle(36, 0, "楷体");
+			outtextxy(getwidth() / 2 - textwidth("继续游戏") / 2, a + 158, "继续游戏");
+			FlushBatchDraw();
+		}
+
+		if(mouse.x <= getwidth() / 2 - textwidth("保存并退出") / 2 + 180 && mouse.x >= getwidth() / 2 - textwidth("保存并退出") / 2 && mouse.y <= b + 194 && mouse.y >= b + 158)
+		{
+			settextcolor(RGB(64, 238, 147));
+			settextstyle(36, 0, "楷体");
+			outtextxy(getwidth() / 2 - textwidth("保存并退出") / 2, b + 158, "保存并退出");
+			FlushBatchDraw();
+			if (mouse.mkLButton)
+			{
+				PlaySound(_T("E:\\button.wav"), NULL, SND_ASYNC | SND_NOSTOP);
+				save();
+				m = TRUE;
+				break;
+			}
+		}
+		else
+		{
+			settextcolor(BLACK);
+			settextstyle(36, 0, "楷体");
+			outtextxy(getwidth() / 2 - textwidth("保存并退出") / 2, b + 158, "保存并退出");
+			FlushBatchDraw();
+		}
+	}
+}
+void selectmode()
+{
+	//(TRANSPARENT);
+	BeginBatchDraw();
+	SetWorkingImage(imgmode);
+	setbkcolor(WHITE);
+	settextcolor(BLACK);
+	cleardevice();
+	settextstyle(72, 0, "楷体");
+	outtextxy(getwidth() / 2 - textwidth("选择难度") / 2, 20, "选择难度");
+	int a = textheight("选择难度") + 80, b, c;
+	b = a + 76;
+	c = b + 76;
+	settextstyle(36, 0, "楷体");
+	outtextxy(getwidth() / 2 - textwidth("简单") / 2, a, "简单");
+	outtextxy(getwidth() / 2 - textwidth("普通") / 2, b, "普通");
+	outtextxy(getwidth() / 2 - textwidth("困难") / 2, c, "困难");
+	SetWorkingImage();
+	putimage(800 / 2 - 310 / 2, 600 / 2 - 400 / 2, imgmode);
+	while (1)
+	{
+		mouse = GetMouseMsg();
+		if (mouse.x <= getwidth() / 2 - textwidth("简单") / 2 + 72 && mouse.x >= getwidth() / 2 - textwidth("简单") / 2 && mouse.y <= a + 136 && mouse.y >= a + 100)
+		{
+			settextcolor(RGB(64, 238, 147));
+			settextstyle(36, 0, "楷体");
+			outtextxy(getwidth() / 2 - textwidth("简单") / 2, a + 100, "简单");
+			FlushBatchDraw();
+			if (mouse.mkLButton)
+			{
+				PlaySound(_T("E:\\button.wav"), NULL, SND_ASYNC | SND_NOSTOP);
+				step = 4;
+				nFood = 10;
+				nBomb = 3;
+				nPgrass = 5;
+				break;
+			}
+		}
+		else
+		{
+			settextcolor(BLACK);
+			settextstyle(36, 0, "楷体");
+			outtextxy(getwidth() / 2 - textwidth("简单") / 2, a + 100, "简单");
+			FlushBatchDraw();
+		}
+
+		if (mouse.x <= getwidth() / 2 - textwidth("普通") / 2 + 72 && mouse.x >= getwidth() / 2 - textwidth("普通") / 2 && mouse.y <= b + 136 && mouse.y >= b + 100)
+		{
+			settextcolor(RGB(64, 238, 147));
+			settextstyle(36, 0, "楷体");
+			outtextxy(getwidth() / 2 - textwidth("普通") / 2, b + 100, "普通");
+			FlushBatchDraw();
+			if (mouse.mkLButton)
+			{
+				PlaySound(_T("E:\\button.wav"), NULL, SND_ASYNC | SND_NOSTOP);
+				step = 3;
+				nFood = 7;
+				nBomb = 5;
+				nPgrass = 8;
+				break;
+			}
+		}
+		else
+		{
+			settextcolor(BLACK);
+			settextstyle(36, 0, "楷体");
+			outtextxy(getwidth() / 2 - textwidth("普通") / 2, b + 100, "普通");
+			FlushBatchDraw();
+		}
+
+		if (mouse.x <= getwidth() / 2 - textwidth("困难") / 2 + 72 && mouse.x >= getwidth() / 2 - textwidth("困难") / 2 && mouse.y <= c + 136 && mouse.y >= c + 100)
+		{
+			settextcolor(RGB(64, 238, 147));
+			settextstyle(36, 0, "楷体");
+			outtextxy(getwidth() / 2 - textwidth("困难") / 2, c + 100, "困难");
+			FlushBatchDraw();
+			if (mouse.mkLButton)
+			{
+				PlaySound(_T("E:\\button.wav"), NULL, SND_ASYNC | SND_NOSTOP);
+				step = 2;
+				nFood = 4;
+				nBomb = 7;
+				nPgrass = 11;
+				break;
+			}
+		}
+		else
+		{
+			settextcolor(BLACK);
+			settextstyle(36, 0, "楷体");
+			outtextxy(getwidth() / 2 - textwidth("困难") / 2, c + 100, "困难");
+			FlushBatchDraw();
+		}
+	}
+}
+void Startup()
+{
+	
+	setbkmode(TRANSPARENT);
+	BeginBatchDraw();
+	setbkcolor(RGB(53, 168, 253));
+	settextcolor(BLACK);
+	cleardevice();
+	Load = FALSE;
+	settextstyle(72, 0, "楷体");
+	outtextxy(getwidth() / 2 - textwidth("贪吃蛇") / 2, 20, "贪吃蛇");
+	int a = textheight("贪吃蛇") + 80, b, c, d, e;
+	b = a + 76;
+	c = b + 76;
+	d = c + 76;
+	e = d + 76;
+	settextstyle(36, 0, "楷体");
+	outtextxy(getwidth() / 2 - textwidth("开始游戏") / 2, a, "开始游戏");
+	outtextxy(getwidth() / 2 - textwidth("继续游戏") / 2, b, "继续游戏");
+	outtextxy(getwidth() / 2 - textwidth("游戏说明") / 2, c, "游戏说明");
+	outtextxy(getwidth() / 2 - textwidth("计分板") / 2, d, "计分板");
+	outtextxy(getwidth() / 2 - textwidth("退出") / 2, e, "退出");
+	while (1)
+	{
+
+		mouse = GetMouseMsg();
+		if (mouse.x <= getwidth() / 2 - textwidth("开始游戏") / 2 + 144 && mouse.x >= getwidth() / 2 - textwidth("开始游戏") / 2 && mouse.y <= a + 36 && mouse.y >= a)
+		{
+			settextcolor(RGB(64, 238, 147));
+			settextstyle(36, 0, "楷体");
+			outtextxy(getwidth() / 2 - textwidth("开始游戏") / 2, a, "开始游戏");
+			FlushBatchDraw();
+			if (mouse.mkLButton)
+			{
+				PlaySound(_T("E:\\button.wav"), NULL, SND_ASYNC | SND_NOSTOP);
+				selectmode();
+				break;
+			}
+		}
+		else
+		{
+			settextcolor(BLACK);
+			settextstyle(36, 0, "楷体");
+			outtextxy(getwidth() / 2 - textwidth("开始游戏") / 2, a, "开始游戏");
+			FlushBatchDraw();
+		}
+
+	//////////
+		if(mouse.x <= getwidth() / 2 - textwidth("继续游戏") / 2 + 144 && mouse.x >= getwidth() / 2 - textwidth("继续游戏") / 2 && mouse.y <= b + 36 && mouse.y >= b)
+		{
+			settextcolor(RGB(64, 238, 147));
+			settextstyle(36, 0, "楷体");
+			outtextxy(getwidth() / 2 - textwidth("继续游戏") / 2, b, "继续游戏");
+			FlushBatchDraw();
+			if (mouse.mkLButton)
+			{
+				//load();
+				Load = TRUE;
+				break;
+			}
+		}
+		else
+		{
+			settextcolor(BLACK);
+			settextstyle(36, 0, "楷体");
+			outtextxy(getwidth() / 2 - textwidth("继续游戏") / 2, b, "继续游戏");
+			FlushBatchDraw();
+		}
+
+	/////////
+		if(mouse.x <= getwidth() / 2 - textwidth("游戏说明") / 2 + 144 && mouse.x >= getwidth() / 2 - textwidth("游戏说明") / 2 && mouse.y <= c + 36 && mouse.y >= c)
+		{
+			settextcolor(RGB(64, 238, 147));
+			settextstyle(36, 0, "楷体");
+			outtextxy(getwidth() / 2 - textwidth("游戏说明") / 2, c, "游戏说明");
+			FlushBatchDraw();
+			if (mouse.mkLButton)
+			{
+				PlaySound(_T("E:\\button.wav"), NULL, SND_ASYNC | SND_NOSTOP);
+				rule();
+				setbkmode(TRANSPARENT);
+				BeginBatchDraw();
+				setbkcolor(RGB(53, 168, 253));
+				settextcolor(BLACK);
+				cleardevice();
+				settextstyle(72, 0, "楷体");
+				outtextxy(getwidth() / 2 - textwidth("贪吃蛇") / 2, 20, "贪吃蛇");
+				int a = textheight("贪吃蛇") + 80, b, c, d, e;
+				b = a + 76;
+				c = b + 76;
+				d = c + 76;
+				e = d + 76;
+				settextstyle(36, 0, "楷体");
+				outtextxy(getwidth() / 2 - textwidth("开始游戏") / 2, a, "开始游戏");
+				outtextxy(getwidth() / 2 - textwidth("继续游戏") / 2, b, "继续游戏");
+				outtextxy(getwidth() / 2 - textwidth("游戏说明") / 2, c, "游戏说明");
+				outtextxy(getwidth() / 2 - textwidth("计分板") / 2, d, "计分板");
+				outtextxy(getwidth() / 2 - textwidth("退出") / 2, e, "退出");
+				FlushBatchDraw();
+			}
+		}
+		else
+		{
+			settextcolor(BLACK);
+			settextstyle(36, 0, "楷体");
+			outtextxy(getwidth() / 2 - textwidth("游戏说明") / 2, c, "游戏说明");
+			FlushBatchDraw();
+		}
+
+	/////////
+		if(mouse.x <= getwidth() / 2 - textwidth("计分板") / 2 + 144 && mouse.x >= getwidth() / 2 - textwidth("计分板") / 2 && mouse.y <= d + 36 && mouse.y >= d)
+		{
+			settextcolor(RGB(64, 238, 147));
+			settextstyle(36, 0, "楷体");
+			outtextxy(getwidth() / 2 - textwidth("计分板") / 2, d, "计分板");
+			FlushBatchDraw();
+		}
+		else
+		{
+			settextcolor(BLACK);
+			settextstyle(36, 0, "楷体");
+			outtextxy(getwidth() / 2 - textwidth("计分板") / 2, d, "计分板");
+			FlushBatchDraw();
+		}
+
+	////////////
+		if (mouse.x <= getwidth() / 2 - textwidth("退出") / 2 + 72 && mouse.x >= getwidth() / 2 - textwidth("退出") / 2 && mouse.y <= e + 36 && mouse.y >= e)
+		{
+			settextcolor(RGB(64, 238, 147));
+			settextstyle(36, 0, "楷体");
+			outtextxy(getwidth() / 2 - textwidth("退出") / 2, e, "退出");
+			FlushBatchDraw();
+			if (mouse.mkLButton)
+			{
+				PlaySound(_T("E:\\button.wav"), NULL, SND_ASYNC | SND_NOSTOP);
+				abc = TRUE;
+				break;
+			}
+		}
+		else
+		{
+			settextcolor(BLACK);
+			settextstyle(36, 0, "楷体");
+			outtextxy(getwidth() / 2 - textwidth("退出") / 2, e, "退出");
+			FlushBatchDraw();
+		}
+	}
+}
+		
+void Snakestartup(int X, int Y)
+{
+	newptr = new Node;
+	newptr->x = X;
+	newptr->y = Y;
+	newptr->lastnode = NULL;
+	newptr->nextnode = NULL;
+	headptr = ptr = temp = newptr;
+	for (int i = 0; i < 6; i++)
+	{
+		setnode();
+		snakemsg.length++;
+	}
+
+}
+void GameStartup()
+{
+	setimage();
+	setbkmode(TRANSPARENT);
+	BeginBatchDraw();
+	SetWorkingImage(map);
+	setfillcolor(mapcolor);
+	setlinecolor(linecolor);
+	cleardevice();
+	solidrectangle(0, 0, 800, 600);
+	for (int i = gap; i < Screenwidth; i += gap)
+		line(i, 0, i, 600);
+	for (int i = gap; i < Screenheight; i += gap)
+		line(0, i, 800, i);
+	SetWorkingImage();
+	snakemsg.movedirection = 1;
+	snakemsg.length = 0;
+	Dead = FALSE;
+	Snakestartup(400, 300);
+	Drawmap();
+	setbomb(nBomb);
+	drawbomb(nBomb);
+	setfood(nFood);
+	drawfood(nFood);
+	setpgrass(nPgrass);
+	drawpgrass(nPgrass);
+	drawsnake();
+	FlushBatchDraw();
+}
+
+////运动/////
+void move(int X, int Y)
+{
+	eatbomb();
+	eatfood();
+	eatpgrass();
+	check();
+	newptr = ptr;
+	temp = newptr->lastnode;
+	if (temp == NULL) temp = newptr;
+	newptr->x = temp->x;
+	newptr->y = temp->y;
+	while (temp != headptr)
+	{
+		newptr = temp;
+		temp = newptr->lastnode;
+		newptr->x = temp->x;
+		newptr->y = temp->y;
+	}
+	newptr = NULL;
+	headptr->x = headptr->x + X * 10;
+	headptr->y = headptr->y + Y * 10;
+}
+short getdirection()
+{
+	if (::GetAsyncKeyState(VK_UP) & 0x8000 && snakemsg.movedirection != S) snakemsg.movedirection = N;
+	if (::GetAsyncKeyState(VK_LEFT) & 0x8000 && snakemsg.movedirection != E) snakemsg.movedirection = W;
+	if (::GetAsyncKeyState(VK_DOWN) & 0x8000 && snakemsg.movedirection != N) snakemsg.movedirection = S;
+	if (::GetAsyncKeyState(VK_RIGHT) & 0x8000 && snakemsg.movedirection != W) snakemsg.movedirection = E;
+	if (::GetAsyncKeyState(VK_UP) & 0x8000 && ::GetAsyncKeyState(VK_RIGHT) & 0x8000)
+		if(snakemsg.movedirection != SW) snakemsg.movedirection = NE;
+	if (::GetAsyncKeyState(VK_UP) & 0x8000 && ::GetAsyncKeyState(VK_LEFT) & 0x8000) 
+		if(snakemsg.movedirection != SE) snakemsg.movedirection = NW;
+	if (::GetAsyncKeyState(VK_DOWN) & 0x8000 && ::GetAsyncKeyState(VK_LEFT) & 0x8000) 
+		if(snakemsg.movedirection != NE) snakemsg.movedirection = SW;
+	if (::GetAsyncKeyState(VK_DOWN) & 0x8000 && ::GetAsyncKeyState(VK_RIGHT) & 0x8000) 
+		if(snakemsg.movedirection != NW) snakemsg.movedirection = SE;
+	return snakemsg.movedirection;
+}
+void crawl()
+{
+	short a = getdirection();
+	switch (a)
+	{
+	case 1:
+		move(0, -1);
+		break;
+	case 2:
+		move(-1, 0);
+		break;
+	case 3:
+		move(0, 1);
+		break;
+	case 4:
+		move(1, 0);
+		break;
+	case 5:
+		move(1, -1);
+		break;
+	case 6:
+		move(-1, -1);
+		break;
+	case 7:
+		move(-1, 1);
+		break;
+	case 8:
+		move(1, 1);
+		break;
+	}
+}
+void running()
+{
+	int score = 0;
+	char s[10];
+	//GameStartup();
+	time_t T = clock();
+	tb = clock();
+	tp = clock();
+	tf = clock();
+	int p = 0;
+	int Tp = 0;
+	m = FALSE;
+	while (Dead != TRUE)
+	{
+		if(::GetAsyncKeyState(VK_ESCAPE) & 0x8000)
+			pause();
+		if(m) break;
+		if (clock() - T > 20)
+		{
+			p++;
+			Tp++;
+			T = clock();
+			if (p == step)
+			{
+				crawl();
+				p = 0;
+			}
+			Drawmap();
+			eatbomb();
+			eatfood();
+			eatpgrass();
+			check();
+			if (clock() - tb > 10000)
+			{
+				tb = clock();
+				setbomb(nBomb);
+			}
+			if (clock() - tp > 8000)
+			{
+				tp = clock();
+				setpgrass(nPgrass);
+			}
+			if(clock() - tf > 20000)
+			{
+				tf = clock();
+				setfood(nFood);
+			}
+			drawbomb(nBomb);
+			drawfood(nFood);
+			if (Tp <= 15) drawpgrass(nPgrass);
+			else if (Tp >= 30) Tp = 0;
+			drawsnake();
+			FlushBatchDraw();
+			BeginBatchDraw();
+		score = 10 * (snakemsg.length - 6);
+		settextcolor(RGB(137, 137, 143));
+		settextstyle(20, 0, "楷体");
+		outtextxy(650, 20, "分数");
+		sprintf(s, "%d", score);
+		outtextxy(700, 20, s);
+		FlushBatchDraw();
+		}
+	}
+	drawsnake();
+	settextcolor(RED);
+	settextstyle(72, 0, "楷体");
+	outtextxy(getwidth() / 2 - textwidth("游戏结束") / 2, getheight() / 2 - textheight("游戏结束"), "游戏结束");
+	settextstyle(30, 0, "楷体");
+	outtextxy(getwidth() / 2 - textwidth("按左键返回") / 2, getheight() / 2 - textheight("游戏结束") + 40, "按左键返回");
+	FlushBatchDraw();
+	bool v = TRUE;
+	while(v && !m)
+	{
+		mouse = GetMouseMsg();
+		if(mouse.mkLButton) v = FALSE;
+		else v = TRUE;
+	}
+}
+
+//////主函数///////
+int main()
+{
+	initgraph(Screenwidth, Screenheight);
+	srand((unsigned)time(NULL));
+	PlaySound(_T("E:\\background music.wav"), NULL, SND_ASYNC | SND_LOOP);
+	while(1)
+	{
+		Startup();
+		if(abc) break;
+		if (Load != TRUE) GameStartup();
+		running();
+	}
+	
+	closegraph();
+	return 0;
+}
